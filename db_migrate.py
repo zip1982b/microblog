@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import imp
 from migrate.versioning import api
 from app import db
@@ -14,3 +15,4 @@ print 'New migration saved as ' + migration
 print 'Current database version: ' + str(api.db_version(SQLALCHEMY_DATABASE_URI, SQLALCHEMY_MIGRATE_REPO))
 
 # заливаем на github
+
