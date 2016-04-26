@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
 """ Представления в Flask пишутся как Python функции. Каждая функция представления сопоставляется с одним или несколькими запросами URL """
-from app import app
-from flask import render_template, flash, redirect
+from app import app, db, lm, oid
+from flask import render_template, flash, redirect, session, url_for, request, g
+from flask.ext.login import login_user, logout_user, current_user, login_required
 from forms import LoginForm
-
+from models import User, ROLE_USER, ROLE_ADMIN
 
 @app.route('/')
 @app.route('/index') # два декоратора route создают привязку адресов / и /index к этой функции.
+
+
 def index():
     user = { 'nickname': 'Zhan' } # выдуманный пользователь
     posts = [ # список выдуманных постов
@@ -28,11 +31,41 @@ def index():
 
 
 @app.route('/login', methods = ['GET', 'POST'])
+@oid.loginhandler  # Flask-OpenID теперь знает, что это — функция для авторизации
+
 def login():
+    if g.user is not None and g.user.is_authenticated():  # g — это глобальный объект Flask, предназначенный для хранения и обмена данными во время жизни запроса. Именно в нём мы будем хранить данные о текущем пользователе
+      return redirect(url_for('index'))
     form = LoginForm()
     if form.validate_on_submit():
-        flash('Login requested for OpenID="' + form.openid.data + '", remember_me=' + str(form.remember_me.data))
-        return redirect('/index')
+        session['remember_me'] = form.remember_me.data
+        return oid.try_login(form.openid.data, ask_for = ['nickname', 'email'])
     return render_template('login.html', title = 'Sign In', form = form, providers = app.config['OPENID_PROVIDERS'])
+
+
+@oid.after_login
+def after_login(resp):
+    if resp.email is None or resp.email == "":
+        flash('Invalid login. Please try again.')
+        return redirect(url_for('login'))
+    user = User.query.filter_by(email = resp.email).first()
+    if user is None:
+        nickname = resp.nickname
+        if nickname is None or nickname == "":
+            nickname = resp.email.split('@')[0]
+        user = User(nickname = nickname, email = resp.email, role = ROLE_USER)
+        db.session.add(user)
+        db.session.commit()
+    remember_me = False
+    if 'remember_me' in session:
+        remember_me = session['remember_me']
+        session.pop('remember_me', None)
+    login_user(user, remember = remember_me)
+    return redirect(request.args.get('next') or url_for('index'))
+
+@app.before_request
+def before_request():
+    g.user = current_user
+
 
 
