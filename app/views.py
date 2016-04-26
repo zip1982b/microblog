@@ -1,18 +1,30 @@
 # -*- coding: utf-8 -*-
 """ Представления в Flask пишутся как Python функции. Каждая функция представления сопоставляется с одним или несколькими запросами URL """
-from app import app, db, lm, oid
+
 from flask import render_template, flash, redirect, session, url_for, request, g
 from flask.ext.login import login_user, logout_user, current_user, login_required
-from forms import LoginForm
-from models import User, ROLE_USER, ROLE_ADMIN
+from app import app, db, lm, oid
+from .forms import LoginForm
+from .models import User
+
+@lm.user_loader
+def load_user(id):
+    return User.query.get(int(id))
+
+
+@app.before_request
+def before_request():
+    g.user = current_user
+
+
+
 
 @app.route('/')
-@app.route('/index') # два декоратора route создают привязку адресов / и /index к этой функции.
-
-
+@app.route('/index')
+@login_required
 def index():
-    user = { 'nickname': 'Zhan' } # выдуманный пользователь
-    posts = [ # список выдуманных постов
+    user = g.user
+    posts = [
         {
             'author': { 'nickname': 'John' },
             'body': 'Beautiful day in Portland!'
@@ -34,7 +46,7 @@ def index():
 @oid.loginhandler  # Flask-OpenID теперь знает, что это — функция для авторизации
 
 def login():
-    if g.user is not None and g.user.is_authenticated():  # g — это глобальный объект Flask, предназначенный для хранения и обмена данными во время жизни запроса. Именно в нём мы будем хранить данные о текущем пользователе
+    if g.user is not None and g.user.is_authenticated:  # g — это глобальный объект Flask, предназначенный для хранения и обмена данными во время жизни запроса. Именно в нём мы будем хранить данные о текущем пользователе
       return redirect(url_for('index'))
     form = LoginForm()
     if form.validate_on_submit():
@@ -63,9 +75,10 @@ def after_login(resp):
     login_user(user, remember = remember_me)
     return redirect(request.args.get('next') or url_for('index'))
 
-@app.before_request
-def before_request():
-    g.user = current_user
+@app.route('/logout')
+def logout():
+    logout_user()
+    return redirect(url_for('index'))
 
 
 
